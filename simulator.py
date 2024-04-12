@@ -198,19 +198,9 @@ class PaintTank:
 
         # return outgoing paint mixture
         return out
-
-
-class Simulator(Thread):
-    """
-    simulation of a paint mixing plant
-    """
-
+    
+class Station():
     def __init__(self):
-        Thread.__init__(self)
-        self.stopRequested = False
-        self.sim_time = 0
-
-        # set up the mixing tank, initially empty
         self.mixer = PaintTank("mixer", BASIN_VOLUME, BASIN_OUTFLOW, PaintMixture())
 
         # set up the paint storage tanks and connect them to the mixing tank
@@ -228,19 +218,34 @@ class Simulator(Thread):
             self.mixer  # mixing basin
         ]
 
-    def get_paint_tank_by_name(self, name):
+
+class Simulator(Thread):
+    """
+    simulation of a paint mixing plant
+    """
+
+    def __init__(self):
+        Thread.__init__(self)
+        self.stopRequested = False
+        self.sim_time = 0
+
+        self.stations = [Station() for _ in range(6)]
+
+    def get_paint_tank_by_name(self, station_name, tank_name):
         """
         Helper method to get a reference to the PaintTank instance with the given name.
         Returns None if not found.
         """
-        return next((tank for tank in self.tanks if tank.name == name), None)
+        station_number = int(station_name[-1])-1
+        return next((tank for tank in self.stations[station_number].tanks if tank.name == tank_name), None)
 
     def simulate(self, interval: float):
         """
         advance simulation for a simulated duration of the specified time interval
         """
-        for tank in self.tanks:
-            tank.simulate_timestep(interval)
+        for station in self.stations:
+            for tank in station.tanks:
+                tank.simulate_timestep(interval)
 
         # increase simulation time
         self.sim_time += interval

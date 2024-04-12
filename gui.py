@@ -2,13 +2,13 @@ import sys
 import time
 import signal
 
-from PyQt5.QtWidgets import QApplication, QWidget, QSlider, QHBoxLayout, QVBoxLayout, QLabel, QMainWindow, QPushButton
+from PyQt5.QtWidgets import QApplication, QWidget, QSlider, QHBoxLayout, QVBoxLayout, QLabel, QMainWindow, QPushButton, QStackedLayout
 from PyQt5.QtCore import Qt, QThread, QRunnable, pyqtSlot, QThreadPool, QObject, pyqtSignal, QRect
 from PyQt5.QtGui import QPainter, QColor, QPen
 from tango import AttributeProxy, DeviceProxy
 
 # prefix for all Tango device names
-TANGO_NAME_PREFIX = "epfl/station1"
+TANGO_NAME_PREFIX = "epfl"
 
 # definition of Tango attribute and command names
 TANGO_ATTRIBUTE_LEVEL = "level"
@@ -100,15 +100,16 @@ class PaintTankWidget(QWidget):
     Widget to hold a single paint tank, valve slider and command buttons
     """
 
-    def __init__(self, name, width, fill_button=False, flush_button=False):
+    def __init__(self, station_name, tank_name, width, setLevel, fill_button=False, flush_button=False):
         super().__init__()
-        self.name = name
+        self.station_name = station_name
+        self.tank_name = tank_name
         self.setGeometry(0, 0, width, 400)
         self.setMinimumSize(width, 400)
         self.layout = QVBoxLayout()
         self.threadpool = QThreadPool()
-        self.worker = TangoBackgroundWorker(self.name)
-        self.worker.level.done.connect(self.setLevel)
+        self.worker = TangoBackgroundWorker(self.station_name, self.tank_name)
+        self.worker.level.done.connect(lambda level : setLevel(level, self.tank_name))
         self.worker.flow.done.connect(self.setFlow)
         self.worker.color.done.connect(self.setColor)
         self.worker.valve.done.connect(self.setValve)
@@ -150,7 +151,7 @@ class PaintTankWidget(QWidget):
         self.setLayout(self.layout)
 
         # set the valve attribute to fully closed
-        worker = TangoWriteAttributeWorker(self.name, TANGO_ATTRIBUTE_VALVE, self.slider.value() / 100.0)
+        worker = TangoWriteAttributeWorker(self.station_name, self.tank_name, TANGO_ATTRIBUTE_VALVE, self.slider.value() / 100.0)
         self.threadpool.start(worker)
         self.worker.start()
         # update the UI element
@@ -173,7 +174,7 @@ class PaintTankWidget(QWidget):
         self.timer_slider = None
 
         # set valve attribute
-        worker = TangoWriteAttributeWorker(self.name, TANGO_ATTRIBUTE_VALVE, self.slider.value() / 100.0)
+        worker = TangoWriteAttributeWorker(self.station_name, self.tank_name, TANGO_ATTRIBUTE_VALVE, self.slider.value() / 100.0)
         worker.signal.done.connect(self.setValve)
         self.threadpool.start(worker)
 
@@ -210,25 +211,22 @@ class PaintTankWidget(QWidget):
         """
         callback method for the "Fill" button
         """
-        worker = TangoRunCommandWorker(self.name, TANGO_COMMAND_FILL)
+        worker = TangoRunCommandWorker(self.station_name, self.tank_name, TANGO_COMMAND_FILL)
         self.threadpool.start(worker)
 
     def on_flush(self):
         """
         callback method for the "Flush" button
         """
-        worker = TangoRunCommandWorker(self.name, TANGO_COMMAND_FLUSH)
+        worker = TangoRunCommandWorker(self.station_name, self.tank_name, TANGO_COMMAND_FLUSH)
         self.threadpool.start(worker)
 
 
-class ColorMixingPlantWindow(QMainWindow):
-    """
-    main UI window
-    """
-
-    def __init__(self):
+class ColorMixingStationWidget(QWidget):
+    def __init__(self, station_name, setLevel):
         super().__init__()
-        self.setWindowTitle("Color Mixing Plant Simulator - EPFL CS-487")
+        self.station_name = station_name
+
         self.setMinimumSize(900, 800)
 
         # Create a vertical layout
@@ -237,15 +235,18 @@ class ColorMixingPlantWindow(QMainWindow):
         # Create a horizontal layout
         hbox = QHBoxLayout()
 
-        self.window = QWidget()
-        self.setCentralWidget(self.window)
+        # label for station
+        station_label = QLabel(f"Station {self.station_name[-1]}")
+        station_label.setAlignment(Qt.AlignCenter)
 
-        self.tanks = {"cyan": PaintTankWidget("cyan", width=150, fill_button=True),
-                      "magenta": PaintTankWidget("magenta", width=150, fill_button=True),
-                      "yellow": PaintTankWidget("yellow", width=150, fill_button=True),
-                      "black": PaintTankWidget("black", width=150, fill_button=True),
-                      "white": PaintTankWidget("white", width=150, fill_button=True),
-                      "mixer": PaintTankWidget("mixer", width=860, flush_button=True)}
+        vbox.addWidget(station_label)
+
+        self.tanks = {"cyan": PaintTankWidget(self.station_name, "cyan", width=150, setLevel=setLevel, fill_button=True),
+                      "magenta": PaintTankWidget(self.station_name, "magenta", width=150, setLevel=setLevel, fill_button=True),
+                      "yellow": PaintTankWidget(self.station_name, "yellow", width=150, setLevel=setLevel, fill_button=True),
+                      "black": PaintTankWidget(self.station_name, "black", width=150, setLevel=setLevel, fill_button=True),
+                      "white": PaintTankWidget(self.station_name, "white", width=150, setLevel=setLevel, fill_button=True),
+                      "mixer": PaintTankWidget(self.station_name, "mixer", width=860, setLevel=setLevel, flush_button=True)}
 
         hbox.addWidget(self.tanks["cyan"])
         hbox.addWidget(self.tanks["magenta"])
@@ -257,7 +258,141 @@ class ColorMixingPlantWindow(QMainWindow):
 
         vbox.addWidget(self.tanks["mixer"])
 
-        self.window.setLayout(vbox)
+        self.layout = vbox
+
+        self.setLayout(self.layout)
+
+
+class ColorMixingStationOverviewWidget(QWidget):
+    def __init__(self, station_name):
+        super().__init__()
+        self.station_name = station_name
+
+        # self.setMinimumSize(300, 250)
+
+        self.layout = QVBoxLayout()
+
+        # add station label to station overview
+        self.label_station_name = QLabel(f'Station {self.station_name[-1]}')
+        self.label_station_name.setAlignment(Qt.AlignCenter)
+        self.layout.addWidget(self.label_station_name)
+
+        # link station overview with its detailled one
+        self.station = ColorMixingStationWidget(self.station_name, self.setLevel)
+
+        # add 6 tank level indicator with tank names
+        level_vbox = QVBoxLayout()
+
+        self.tank_labels = {tank_name : (QLabel(tank_name), QLabel('--')) for tank_name in self.station.tanks.keys()}
+        for tank_label in self.tank_labels.values():
+            level_hbox = QHBoxLayout()
+            level_hbox.addWidget(tank_label[0])
+            level_hbox.addWidget(tank_label[1])
+            # add tank line to level_vbox
+            level_vbox.addLayout(level_hbox)
+
+        self.layout.addLayout(level_vbox)
+        
+        self.setLayout(self.layout)
+
+    def setLevel(self, level, tank_name):
+        """
+        set the level of the paint tank, range: 0-1
+        """
+        self.station.tanks[tank_name].tank.fill_level = level
+        self.station.tanks[tank_name].label_level.setText("Level: %.1f %%" % (level * 100))
+        self.tank_labels[tank_name][1].setText('%.1f %%' % (level*100))
+        self.station.tanks[tank_name].tank.update()   
+
+
+class PlantOverviewWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setMinimumSize(900, 500)
+
+        self.layout = QVBoxLayout()
+
+        self.station_overviews = [ColorMixingStationOverviewWidget(f'station{i}') for i in range (1,7)]
+
+        for i in range(3):
+            hbox = QHBoxLayout()
+            hbox.addWidget(self.station_overviews[2*i])
+            hbox.addWidget(self.station_overviews[2*i+1])
+
+            self.layout.addLayout(hbox)
+
+            self.setLayout(self.layout)
+
+
+class Gui(QMainWindow):
+    """
+    main UI window
+    """
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Color Mixing Plant Simulator - EPFL CS-487")
+        self.setMinimumSize(900, 1300)
+
+        self.window = QWidget()
+        self.setCentralWidget(self.window)
+
+        # Create a layouts
+        self.layout = QHBoxLayout()
+        self.left_panel = QVBoxLayout()
+
+        # Create plant overview panel
+        self.plant_overview = PlantOverviewWidget()
+        self.left_panel.addWidget(self.plant_overview)
+        
+        # add inspect buttons
+        button_layout = QHBoxLayout()
+        # for i in range(1,7):
+        #     button = QPushButton(f'Inspect {i}', self)
+        #     button.setToolTip(f'Inspect station {i}')
+        #     button.clicked.connect(lambda: self.on_inspect(i-1))
+        #     button_layout.addWidget(button)
+
+        button1 = QPushButton(f'Inspect {1}', self)
+        button1.clicked.connect(lambda x: self.on_inspect(0))
+        button1.setToolTip(f'Inspect station {1}')
+        button2 = QPushButton(f'Inspect {2}', self)
+        button2.clicked.connect(lambda x: self.on_inspect(1))
+        button2.setToolTip(f'Inspect station {2}')
+        button3 = QPushButton(f'Inspect {3}', self)
+        button3.clicked.connect(lambda x: self.on_inspect(2))
+        button3.setToolTip(f'Inspect station {3}')
+        button4 = QPushButton(f'Inspect {4}', self)
+        button4.clicked.connect(lambda x: self.on_inspect(3))
+        button4.setToolTip(f'Inspect station {4}')
+        button5 = QPushButton(f'Inspect {5}', self)
+        button5.clicked.connect(lambda x: self.on_inspect(4))
+        button5.setToolTip(f'Inspect station {5}')
+        button6 = QPushButton(f'Inspect {6}', self)
+        button6.clicked.connect(lambda x: self.on_inspect(5))
+        button6.setToolTip(f'Inspect station {6}')
+
+        button_layout.addWidget(button1)
+        button_layout.addWidget(button2)
+        button_layout.addWidget(button3)
+        button_layout.addWidget(button4)
+        button_layout.addWidget(button5)
+        button_layout.addWidget(button6)
+        
+
+        self.left_panel.addLayout(button_layout)
+        self.layout.addLayout(self.left_panel)
+
+        self.right_panel = QStackedLayout()
+        for station_overview in self.plant_overview.station_overviews:
+            self.right_panel.addWidget(station_overview.station)
+        self.right_panel.setCurrentIndex(0)
+
+        self.layout.addLayout(self.right_panel)
+
+        self.window.setLayout(self.layout)
+
+    def on_inspect(self, station_i):
+        self.right_panel.setCurrentIndex(station_i)
 
 
 class WorkerSignal(QObject):
@@ -273,10 +408,10 @@ class TangoWriteAttributeWorker(QRunnable):
     This is used to avoid blocking the main UI thread.
     """
 
-    def __init__(self, device, attribute, value):
+    def __init__(self, station_name, device, attribute, value):
         super().__init__()
         self.signal = WorkerSignal()
-        self.path = "%s/%s/%s" % (TANGO_NAME_PREFIX, device, attribute)
+        self.path = "%s/%s/%s/%s" % (TANGO_NAME_PREFIX, station_name, device, attribute)
         self.value = value
 
     @pyqtSlot()
@@ -303,7 +438,7 @@ class TangoRunCommandWorker(QRunnable):
     This is used to avoid blocking the main UI thread.
     """
 
-    def __init__(self, device, command, *args):
+    def __init__(self, station_name, device, command, *args):
         """
         creates a new instance for the given device instance and command
         :param device: device name
@@ -312,7 +447,7 @@ class TangoRunCommandWorker(QRunnable):
         """
         super().__init__()
         self.signal = WorkerSignal()
-        self.device = "%s/%s" % (TANGO_NAME_PREFIX, device)
+        self.device = "%s/%s/%s" % (TANGO_NAME_PREFIX, station_name, device)
         self.command = command
         self.args = args
 
@@ -340,14 +475,15 @@ class TangoBackgroundWorker(QThread):
     It will signal to the UI when new data is available.
     """
 
-    def __init__(self, name, interval=0.5):
+    def __init__(self, station_name, tank_name, interval=0.5):
         """
         creates a new instance
         :param name: device name
         :param interval: polling interval in seconds
         """
         super().__init__()
-        self.name = name
+        self.station_name = station_name
+        self.tank_name = tank_name
         self.interval = interval
         self.level = WorkerSignal()
         self.flow = WorkerSignal()
@@ -358,15 +494,15 @@ class TangoBackgroundWorker(QThread):
         """
         main method of the worker
         """
-        print("Starting TangoBackgroundWorker for '%s' tank" % self.name)
+        print("Starting TangoBackgroundWorker for '%s'/'%s' tank" % (self.station_name,self.tank_name))
         # define attributes
         try:
-            level = AttributeProxy("%s/%s/%s" % (TANGO_NAME_PREFIX, self.name, TANGO_ATTRIBUTE_LEVEL))
-            flow = AttributeProxy("%s/%s/%s" % (TANGO_NAME_PREFIX, self.name, TANGO_ATTRIBUTE_FLOW))
-            color = AttributeProxy("%s/%s/%s" % (TANGO_NAME_PREFIX, self.name, TANGO_ATTRIBUTE_COLOR))
-            valve = AttributeProxy("%s/%s/%s" % (TANGO_NAME_PREFIX, self.name, TANGO_ATTRIBUTE_VALVE))
+            level = AttributeProxy("%s/%s/%s/%s" % (TANGO_NAME_PREFIX, self.station_name, self.tank_name, TANGO_ATTRIBUTE_LEVEL))
+            flow = AttributeProxy("%s/%s/%s/%s" % (TANGO_NAME_PREFIX, self.station_name, self.tank_name, TANGO_ATTRIBUTE_FLOW))
+            color = AttributeProxy("%s/%s/%s/%s" % (TANGO_NAME_PREFIX, self.station_name, self.tank_name, TANGO_ATTRIBUTE_COLOR))
+            valve = AttributeProxy("%s/%s/%s/%s" % (TANGO_NAME_PREFIX, self.station_name, self.tank_name, TANGO_ATTRIBUTE_VALVE))
         except Exception as e:
-            print("Error creating AttributeProxy for %s" % self.name)
+            print("Error creating AttributeProxy for %s" % self.tank_name)
             return
 
         while True:
@@ -394,7 +530,8 @@ if __name__ == '__main__':
 
     # init the QT application and the main window
     app = QApplication(sys.argv)
-    ui = ColorMixingPlantWindow()
+    # ui = ColorMixingPlantWindow()
+    ui = Gui()
     # show the UI
     ui.show()
     # start the QT application (blocking until UI exits)

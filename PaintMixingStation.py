@@ -12,9 +12,10 @@ class PaintTank(Device):
         super().init_device()
         print("Initializing class %s for device %s" % (self.__class__.__name__, self.get_name()))
         # extract the tank name from the full device name, e.g. "epfl/station1/cyan" -> "cyan"
+        station_name = self.get_name().split('/')[-2]
         tank_name = self.get_name().split('/')[-1]
         # get a reference to the simulated tank
-        self.tank = simulator.get_paint_tank_by_name(tank_name)
+        self.tank = simulator.get_paint_tank_by_name(station_name,tank_name)
         if not self.tank:
             raise Exception(
                 "Error: Can't find matching paint tank in the simulator with given name = %s" % self.get_name())
@@ -26,7 +27,7 @@ class PaintTank(Device):
         range: 0 to 1
         """
         # TODO: return level of simulated tank
-        return 0.5
+        return self.tank.get_level()
 
     @attribute(dtype=float)
     def flow(self):
@@ -34,7 +35,7 @@ class PaintTank(Device):
         get flow attribute
         """
         # TODO: return flow of simulated tank
-        return 0
+        return self.tank.get_outflow()
 
     valve = attribute(label="valve", dtype=float,
                       access=AttrWriteType.READ_WRITE,
@@ -47,14 +48,14 @@ class PaintTank(Device):
         :param ratio: 0 to 1
         """
         # TODO: set valve of simulated tank
-        pass
+        self.tank.set_valve(ratio)
 
     def get_valve(self):
         """
         get valve attribute (range: 0 to 1)
         """
         # TODO: get valve of simulated tank
-        return 0
+        return self.tank.valve_ratio
 
     @attribute(dtype=str)
     def color(self):
@@ -62,7 +63,7 @@ class PaintTank(Device):
         get color attribute (hex string)
         """
         # TODO: get color of simulated tank
-        return "#808080"  # grey
+        return self.tank.get_color_rgb()
 
     @command(dtype_out=float)
     def Fill(self):
@@ -70,7 +71,7 @@ class PaintTank(Device):
         command to fill up the tank with paint
         """
         # TODO: fill simulated tank and return new level
-        return 0.5
+        return self.tank.fill()
 
     @command(dtype_out=float)
     def Flush(self):
@@ -78,11 +79,12 @@ class PaintTank(Device):
         command to flush all paint
         """
         # TODO: flush simulated tank and return new level
-        return 0.5
+        return self.tank.flush()
 
 
 if __name__ == "__main__":
     # start the simulator as a background thread
+
     simulator = Simulator()
     simulator.start()
 
