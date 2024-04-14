@@ -235,12 +235,6 @@ class ColorMixingStationWidget(QWidget):
         # Create a horizontal layout
         hbox = QHBoxLayout()
 
-        # label for station
-        station_label = QLabel(f"Station {self.station_name[-1]}")
-        station_label.setAlignment(Qt.AlignCenter)
-
-        vbox.addWidget(station_label)
-
         self.tanks = {"cyan": PaintTankWidget(self.station_name, "cyan", width=150, setLevel=setLevel, fill_button=True),
                       "magenta": PaintTankWidget(self.station_name, "magenta", width=150, setLevel=setLevel, fill_button=True),
                       "yellow": PaintTankWidget(self.station_name, "yellow", width=150, setLevel=setLevel, fill_button=True),
@@ -264,9 +258,10 @@ class ColorMixingStationWidget(QWidget):
 
 
 class ColorMixingStationOverviewWidget(QWidget):
-    def __init__(self, station_name):
+    def __init__(self, station_name, wrt_alarm):
         super().__init__()
         self.station_name = station_name
+        self.wrt_alarm = wrt_alarm
 
         # self.setMinimumSize(300, 250)
 
@@ -301,6 +296,7 @@ class ColorMixingStationOverviewWidget(QWidget):
         """
         set the level of the paint tank, range: 0-1
         """
+        self.check_alarm_generation(self.station.tanks[tank_name].tank.fill_level, level, tank_name)
         self.station.tanks[tank_name].tank.fill_level = level
         self.station.tanks[tank_name].label_level.setText("Level: %.1f %%" % (level * 100))
         self.tank_labels[tank_name][1].setText('%.1f %%' % (level*100))
@@ -308,38 +304,46 @@ class ColorMixingStationOverviewWidget(QWidget):
         self.tank_labels[tank_name][1].setStyleSheet("background-color: "+self.get_label_color(tank_name, level))
         self.station.tanks[tank_name].tank.update()  
 
+    def check_alarm_generation(self, previous_level, level, tank_name):
+        if tank_name == 'mixer':
+            if previous_level<0.8 and level>=0.8 or previous_level<0.9 and level>=0.9:
+                self.wrt_alarm(f'{self.station_name}/{tank_name} : {int(level*10)/10:.0%} full')
+        else:
+            if previous_level>0.2 and level<=0.2 or previous_level>0.1 and level<=0.1:
+                self.wrt_alarm(f'{self.station_name}/{tank_name} : {int(level*10)/10:.0%} remaining')
+
     def get_label_color(self, tank_name, level):
         """
         get the color to raise concern on soon empty or full tanks
         """
         if tank_name == 'mixer':
-            # if level>0.9:
+            # if level>=0.9:
             #     return f'rgba(255, 0, 0, {(level-0.8)*5})' # red
-            # elif level>0.8:
+            # elif level>=0.8:
             #     return f'rgba(255, 165, 0, {(level-0.8)*5})' # orange
-            if level>0.8:
+            if level>=0.8:
                 return f'rgba(255, {int(255 * (1 - 5*(level-0.8)))}, 0, {0.4+3*(level-0.8)})'
             else:
                 return 'none'
         else:
-            # if level<0.1:
+            # if level=<0.1:
             #     return f'rgba(255, 0, 0, {1-5*level})' # red
-            # elif level<0.2:
+            # elif level=<0.2:
             #     return f'rgba(255, 165, 0, {1-5*level})' # orange
-            if level<0.2:
+            if level<=0.2:
                 return f'rgba(255, {int(255 * 5 * level)}, 0, {1-3*level})'
             else:
                 return 'none'
 
 
 class PlantOverviewWidget(QWidget):
-    def __init__(self):
+    def __init__(self, wrt_alarm):
         super().__init__()
         # self.setMinimumSize(900, 500)
 
         self.layout = QVBoxLayout()
 
-        self.station_overviews = [ColorMixingStationOverviewWidget(f'station{i}') for i in range (1,7)]
+        self.station_overviews = [ColorMixingStationOverviewWidget(f'station{i}', wrt_alarm) for i in range (1,7)]
 
         for i in range(3):
             hbox = QHBoxLayout()
@@ -364,12 +368,17 @@ class Gui(QMainWindow):
         self.setCentralWidget(self.window)
 
         # Create a layouts
-        self.layout = QHBoxLayout()
-        self.left_panel = QVBoxLayout()
+        self.layout = QVBoxLayout()
+        self.up = QHBoxLayout()
+        self.down = QVBoxLayout()
+        self.upleft_panel = QVBoxLayout()
 
-        # Create plant overview panel
-        self.plant_overview = PlantOverviewWidget()
-        self.left_panel.addWidget(self.plant_overview)
+        # Create upleft/plant overview panel
+        plant_overview_label = QLabel('Plant Overview')
+        plant_overview_label.setAlignment(Qt.AlignCenter)
+        self.upleft_panel.addWidget(plant_overview_label)
+        self.plant_overview = PlantOverviewWidget(self.write_new_alarm)
+        self.upleft_panel.addWidget(self.plant_overview)
         
         # add inspect buttons
         button_layout = QHBoxLayout()
@@ -406,20 +415,45 @@ class Gui(QMainWindow):
         button_layout.addWidget(button6)
         
 
-        self.left_panel.addLayout(button_layout)
-        self.layout.addLayout(self.left_panel)
+        self.upleft_panel.addLayout(button_layout)
+        self.up.addLayout(self.upleft_panel)
 
-        self.right_panel = QStackedLayout()
+        # upright/detailled view panel
+        self.upright_panel = QVBoxLayout()
+        self.detailled_view_label = QLabel('Detailled view : Station 1')
+        self.detailled_view_label.setAlignment(Qt.AlignCenter)
+        self.upright_panel.addWidget(self.detailled_view_label)
+        self.detailled_view = QStackedLayout()
         for station_overview in self.plant_overview.station_overviews:
-            self.right_panel.addWidget(station_overview.station)
-        self.right_panel.setCurrentIndex(0)
+            self.detailled_view.addWidget(station_overview.station)
+        self.detailled_view.setCurrentIndex(0)
+        self.upright_panel.addLayout(self.detailled_view)
 
-        self.layout.addLayout(self.right_panel)
+        self.up.addLayout(self.upright_panel)
+        self.layout.addLayout(self.up)
+
+        # down/alarms panel
+        self.down.addWidget(QLabel('Alarms'))
+        self.alarm_labels = [QLabel('') for _ in range(10)]
+        for alarm_label in self.alarm_labels:
+            self.down.addWidget(alarm_label)
+        self.layout.addLayout(self.down)
 
         self.window.setLayout(self.layout)
 
     def on_inspect(self, station_i):
-        self.right_panel.setCurrentIndex(station_i)
+        self.detailled_view_label.setText(f'Detailled view : Station {station_i+1}')
+        self.detailled_view.setCurrentIndex(station_i)
+
+    def write_new_alarm(self, alarm_text):
+        now = time.localtime()
+        timestamp = f'{now.tm_mday:02}/{now.tm_mon:02}/{now.tm_year} {now.tm_hour:02}:{now.tm_min:02}:{now.tm_sec:02}'
+        
+        for i in reversed(range(1,len(self.alarm_labels))):
+            self.alarm_labels[i].setText(self.alarm_labels[i-1].text())
+
+        self.alarm_labels[0].setText(timestamp + ' : ' + alarm_text)
+
 
 
 class WorkerSignal(QObject):
@@ -558,6 +592,7 @@ if __name__ == '__main__':
     # init the QT application and the main window
     app = QApplication(sys.argv)
     # ui = ColorMixingPlantWindow()
+
     ui = Gui()
     # show the UI
     ui.show()
