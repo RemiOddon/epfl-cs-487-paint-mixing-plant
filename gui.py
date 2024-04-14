@@ -2,7 +2,7 @@ import sys
 import time
 import signal
 
-from PyQt5.QtWidgets import QApplication, QWidget, QSlider, QHBoxLayout, QVBoxLayout, QLabel, QMainWindow, QPushButton, QStackedLayout
+from PyQt5.QtWidgets import QApplication, QWidget, QSlider, QHBoxLayout, QVBoxLayout, QLabel, QMainWindow, QPushButton, QStackedLayout, QGraphicsOpacityEffect
 from PyQt5.QtCore import Qt, QThread, QRunnable, pyqtSlot, QThreadPool, QObject, pyqtSignal, QRect
 from PyQt5.QtGui import QPainter, QColor, QPen
 from tango import AttributeProxy, DeviceProxy
@@ -286,6 +286,8 @@ class ColorMixingStationOverviewWidget(QWidget):
         self.tank_labels = {tank_name : (QLabel(tank_name), QLabel('--')) for tank_name in self.station.tanks.keys()}
         for tank_label in self.tank_labels.values():
             level_hbox = QHBoxLayout()
+            tank_label[0].setAlignment(Qt.AlignCenter)
+            tank_label[1].setAlignment(Qt.AlignCenter)
             level_hbox.addWidget(tank_label[0])
             level_hbox.addWidget(tank_label[1])
             # add tank line to level_vbox
@@ -302,13 +304,38 @@ class ColorMixingStationOverviewWidget(QWidget):
         self.station.tanks[tank_name].tank.fill_level = level
         self.station.tanks[tank_name].label_level.setText("Level: %.1f %%" % (level * 100))
         self.tank_labels[tank_name][1].setText('%.1f %%' % (level*100))
-        self.station.tanks[tank_name].tank.update()   
+
+        self.tank_labels[tank_name][1].setStyleSheet("background-color: "+self.get_label_color(tank_name, level))
+        self.station.tanks[tank_name].tank.update()  
+
+    def get_label_color(self, tank_name, level):
+        """
+        get the color to raise concern on soon empty or full tanks
+        """
+        if tank_name == 'mixer':
+            # if level>0.9:
+            #     return f'rgba(255, 0, 0, {(level-0.8)*5})' # red
+            # elif level>0.8:
+            #     return f'rgba(255, 165, 0, {(level-0.8)*5})' # orange
+            if level>0.8:
+                return f'rgba(255, {int(255 * (1 - 5*(level-0.8)))}, 0, {0.4+3*(level-0.8)})'
+            else:
+                return 'none'
+        else:
+            # if level<0.1:
+            #     return f'rgba(255, 0, 0, {1-5*level})' # red
+            # elif level<0.2:
+            #     return f'rgba(255, 165, 0, {1-5*level})' # orange
+            if level<0.2:
+                return f'rgba(255, {int(255 * 5 * level)}, 0, {1-3*level})'
+            else:
+                return 'none'
 
 
 class PlantOverviewWidget(QWidget):
     def __init__(self):
         super().__init__()
-        self.setMinimumSize(900, 500)
+        # self.setMinimumSize(900, 500)
 
         self.layout = QVBoxLayout()
 
@@ -331,7 +358,7 @@ class Gui(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Color Mixing Plant Simulator - EPFL CS-487")
-        self.setMinimumSize(900, 1300)
+        # self.setMinimumSize(900, 1300)
 
         self.window = QWidget()
         self.setCentralWidget(self.window)
