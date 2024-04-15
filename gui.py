@@ -422,6 +422,11 @@ class Gui(QMainWindow):
         self.upleft_panel.addLayout(button_layout)
         self.up.addLayout(self.upleft_panel)
 
+        # Vertical line
+        vline = QFrame()
+        vline.setFrameShape(QFrame.VLine)
+        self.up.addWidget(vline)
+
         # upright/detailled view panel
         self.upright_panel = QVBoxLayout()
         self.detailled_view = QStackedLayout()
@@ -432,6 +437,11 @@ class Gui(QMainWindow):
 
         self.up.addLayout(self.upright_panel)
         self.layout.addLayout(self.up)
+
+        # Horizontal line
+        hline = QFrame()
+        hline.setFrameShape(QFrame.HLine)
+        self.layout.addWidget(hline)
 
         # down/alarms panel
         self.down.addWidget(QLabel('Alarms'))
