@@ -272,12 +272,13 @@ if __name__ == "__main__":
     simulator = Simulator()
 
     # set initial conditions, open valve of first tank by 50%
-    simulator.tanks[0].set_valve(50)
+    simulator.stations[0].tanks[0].set_valve(50)
 
     # run the simulation for the specified time step and print some information
     for i in range(10):
         simulator.simulate(1.0)
         print("============================================")
-        for tank in simulator.tanks:
-            print("Name: %s Volume: %.2f/%.2f" % (tank.name, tank.paint.volume, tank.tank_volume),
-                  "paint: %s" % tank.paint)
+        for i,station in enumerate(simulator.stations):
+            for tank in station.tanks:
+                print("Name: %s Volume: %.2f/%.2f" % (f'station{i+1}'+tank.name, tank.paint.volume, tank.tank_volume),
+                    "paint: %s" % tank.paint)

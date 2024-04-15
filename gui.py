@@ -2,7 +2,7 @@ import sys
 import time
 import signal
 
-from PyQt5.QtWidgets import QApplication, QWidget, QSlider, QHBoxLayout, QVBoxLayout, QLabel, QMainWindow, QPushButton, QStackedLayout, QGraphicsOpacityEffect
+from PyQt5.QtWidgets import QApplication, QWidget, QSlider, QHBoxLayout, QVBoxLayout, QLabel, QMainWindow, QPushButton, QStackedLayout, QFrame
 from PyQt5.QtCore import Qt, QThread, QRunnable, pyqtSlot, QThreadPool, QObject, pyqtSignal, QRect
 from PyQt5.QtGui import QPainter, QColor, QPen
 from tango import AttributeProxy, DeviceProxy
@@ -235,6 +235,10 @@ class ColorMixingStationWidget(QWidget):
         # Create a horizontal layout
         hbox = QHBoxLayout()
 
+        detailled_view_label = QLabel(f'Detailled view : Station {self.station_name[-1]}')
+        detailled_view_label.setAlignment(Qt.AlignCenter)
+        vbox.addWidget(detailled_view_label)
+
         self.tanks = {"cyan": PaintTankWidget(self.station_name, "cyan", width=150, setLevel=setLevel, fill_button=True),
                       "magenta": PaintTankWidget(self.station_name, "magenta", width=150, setLevel=setLevel, fill_button=True),
                       "yellow": PaintTankWidget(self.station_name, "yellow", width=150, setLevel=setLevel, fill_button=True),
@@ -343,6 +347,10 @@ class PlantOverviewWidget(QWidget):
 
         self.layout = QVBoxLayout()
 
+        plant_overview_label = QLabel('Plant Overview')
+        plant_overview_label.setAlignment(Qt.AlignCenter)
+        self.layout.addWidget(plant_overview_label)
+
         self.station_overviews = [ColorMixingStationOverviewWidget(f'station{i}', wrt_alarm) for i in range (1,7)]
 
         for i in range(3):
@@ -374,9 +382,6 @@ class Gui(QMainWindow):
         self.upleft_panel = QVBoxLayout()
 
         # Create upleft/plant overview panel
-        plant_overview_label = QLabel('Plant Overview')
-        plant_overview_label.setAlignment(Qt.AlignCenter)
-        self.upleft_panel.addWidget(plant_overview_label)
         self.plant_overview = PlantOverviewWidget(self.write_new_alarm)
         self.upleft_panel.addWidget(self.plant_overview)
         
@@ -414,15 +419,11 @@ class Gui(QMainWindow):
         button_layout.addWidget(button5)
         button_layout.addWidget(button6)
         
-
         self.upleft_panel.addLayout(button_layout)
         self.up.addLayout(self.upleft_panel)
 
         # upright/detailled view panel
         self.upright_panel = QVBoxLayout()
-        self.detailled_view_label = QLabel('Detailled view : Station 1')
-        self.detailled_view_label.setAlignment(Qt.AlignCenter)
-        self.upright_panel.addWidget(self.detailled_view_label)
         self.detailled_view = QStackedLayout()
         for station_overview in self.plant_overview.station_overviews:
             self.detailled_view.addWidget(station_overview.station)
@@ -442,7 +443,6 @@ class Gui(QMainWindow):
         self.window.setLayout(self.layout)
 
     def on_inspect(self, station_i):
-        self.detailled_view_label.setText(f'Detailled view : Station {station_i+1}')
         self.detailled_view.setCurrentIndex(station_i)
 
     def write_new_alarm(self, alarm_text):
@@ -453,7 +453,6 @@ class Gui(QMainWindow):
             self.alarm_labels[i].setText(self.alarm_labels[i-1].text())
 
         self.alarm_labels[0].setText(timestamp + ' : ' + alarm_text)
-
 
 
 class WorkerSignal(QObject):
