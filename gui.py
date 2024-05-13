@@ -321,21 +321,17 @@ class ColorMixingStationOverviewWidget(QWidget):
         get the color to raise concern on soon empty or full tanks
         """
         if tank_name == 'mixer':
-            # if level>=0.9:
-            #     return f'rgba(255, 0, 0, {(level-0.8)*5})' # red
-            # elif level>=0.8:
-            #     return f'rgba(255, 165, 0, {(level-0.8)*5})' # orange
-            if level>=0.8:
-                return f'rgba(255, {int(255 * (1 - 5*(level-0.8)))}, 0, {0.4+3*(level-0.8)})'
+            if level>=0.9:
+                return f'rgba(255, 0, 0, 1)' # red
+            elif level>=0.8:
+                return f'rgba(255, 165, 0, 1)' # orange
             else:
                 return 'none'
         else:
-            # if level=<0.1:
-            #     return f'rgba(255, 0, 0, {1-5*level})' # red
-            # elif level=<0.2:
-            #     return f'rgba(255, 165, 0, {1-5*level})' # orange
-            if level<=0.2:
-                return f'rgba(255, {int(255 * 5 * level)}, 0, {1-3*level})'
+            if level<=0.1:
+                return f'rgba(255, 0, 0, 1)' # red
+            elif level<=0.2:
+                return f'rgba(255, 165, 0, 1)' # orange
             else:
                 return 'none'
 
