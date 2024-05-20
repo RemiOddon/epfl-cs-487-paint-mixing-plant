@@ -2,6 +2,8 @@ import sys
 import time
 import signal
 
+import numpy as np
+
 from PyQt5.QtWidgets import QApplication, QWidget, QSlider, QHBoxLayout, QVBoxLayout, QLabel, QMainWindow, QPushButton, QStackedLayout, QFrame
 from PyQt5.QtCore import Qt, QThread, QRunnable, pyqtSlot, QThreadPool, QObject, pyqtSignal, QRect
 from PyQt5.QtGui import QPainter, QColor, QPen
@@ -310,11 +312,15 @@ class ColorMixingStationOverviewWidget(QWidget):
 
     def check_alarm_generation(self, previous_level, level, tank_name):
         if tank_name == 'mixer':
-            if previous_level<0.8 and level>=0.8 or previous_level<0.9 and level>=0.9:
-                self.wrt_alarm(f'{self.station_name}/{tank_name} : {int(level*10)/10:.0%} full')
+            if previous_level<0.9 and level>=0.9:
+                self.wrt_alarm(f'{self.station_name}/{tank_name}',f'{np.round(level*10)/10:.0%} full','high','close input valves or flush tank')
+            elif previous_level<0.8 and level>=0.8:
+                self.wrt_alarm(f'{self.station_name}/{tank_name}',f'{np.round(level*10)/10:.0%} full','low','reduce input valves or plan tank flush')
         else:
-            if previous_level>0.2 and level<=0.2 or previous_level>0.1 and level<=0.1:
-                self.wrt_alarm(f'{self.station_name}/{tank_name} : {int(level*10)/10:.0%} remaining')
+            if previous_level>0.2 and level<=0.2:
+                self.wrt_alarm(f'{self.station_name}/{tank_name}',f'{np.round(level*10)/10:.0%} remaining','low','reduce valve or plan tank refill')
+            elif previous_level>0.1 and level<=0.1:
+                self.wrt_alarm(f'{self.station_name}/{tank_name}',f'{np.round(level*10)/10:.0%} remaining','high','close valve or fill tank')
 
     def get_label_color(self, tank_name, level):
         """
@@ -440,10 +446,21 @@ class Gui(QMainWindow):
         self.layout.addWidget(hline)
 
         # down/alarms panel
-        self.down.addWidget(QLabel('Alarms'))
-        self.alarm_labels = [QLabel('') for _ in range(10)]
-        for alarm_label in self.alarm_labels:
-            self.down.addWidget(alarm_label)
+        alarm_label = QLabel('Alarms')
+        alarm_label.setAlignment(Qt.AlignCenter)
+        self.down.addWidget(alarm_label)
+        self.alarms = [[QLabel('') for _ in range(11)] for _ in range(5)]
+        for j,col_text in enumerate(['Priority','Timestamp','Station/Tank','Description','Remedial action']):
+            self.alarms[j][0].setText(col_text)
+        alarm_labels_layout = QHBoxLayout()
+        for alarm_col in self.alarms:
+            alarm_col_layout = QVBoxLayout()
+            for label in alarm_col:
+                label.setAlignment(Qt.AlignLeft)
+                # label.setMaximumSize(200,50)
+                alarm_col_layout.addWidget(label)
+            alarm_labels_layout.addLayout(alarm_col_layout)
+        self.down.addLayout(alarm_labels_layout)
         self.layout.addLayout(self.down)
 
         self.window.setLayout(self.layout)
@@ -451,14 +468,17 @@ class Gui(QMainWindow):
     def on_inspect(self, station_i):
         self.detailled_view.setCurrentIndex(station_i)
 
-    def write_new_alarm(self, alarm_text):
+    def write_new_alarm(self, station_tank_name, alarm_text, priority, action):
         now = time.localtime()
         timestamp = f'{now.tm_mday:02}/{now.tm_mon:02}/{now.tm_year} {now.tm_hour:02}:{now.tm_min:02}:{now.tm_sec:02}'
+        alarm_labels = [priority.capitalize(), timestamp, station_tank_name, alarm_text, action.capitalize()]
         
-        for i in reversed(range(1,len(self.alarm_labels))):
-            self.alarm_labels[i].setText(self.alarm_labels[i-1].text())
+        for j in range(5):
+            for i in reversed(range(2,len(self.alarms[j]))):
+                self.alarms[j][i].setText(self.alarms[j][i-1].text())
 
-        self.alarm_labels[0].setText(timestamp + ' : ' + alarm_text)
+        for j in range(5):
+            self.alarms[j][1].setText(alarm_labels[j])
 
 
 class WorkerSignal(QObject):
